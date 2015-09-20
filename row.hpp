@@ -39,7 +39,7 @@ template <typename T> class row {
         std::stringstream ss;
         for (int i = 0; i < tuple_.size(); ++i) {
             if (i != 0) {
-                ss << " ";
+                ss << "  ";
             }
             ss << std::to_string(tuple_[i]);
         }
@@ -48,7 +48,7 @@ template <typename T> class row {
 
     T operator[](int index) const {
         if (index > tuple_.size() || index < 0) {
-            throw "IndexError: Out of bounds.";
+            throw std::string("IndexError: index = ") + std::to_string(index) + std::string(" is out of bounds.");
         }
         return tuple_[index];
     }
@@ -62,7 +62,7 @@ template<> std::string row<std::string>::to_string() const {
     std::stringstream ss;
     for (int i = 0; i < tuple_.size(); ++i) {
         if (i != 0) {
-            ss << " ";
+            ss << "  ";
           }
           ss << tuple_[i];
     }
@@ -80,9 +80,6 @@ template<> int row<std::string>::get_bytes() const {
 std::string to_str(std::vector<row<std::string>> strings) {
     std::stringstream ss;
     for (int i = 0; i < strings.size(); ++i) {
-        if (i != 0) {
-            ss << ",";
-        }
         ss << strings[i].to_string() << std::endl;
     }
     return ss.str();
@@ -91,9 +88,6 @@ std::string to_str(std::vector<row<std::string>> strings) {
 std::string to_str(std::vector<row<std::string>> *strings) {
     std::stringstream ss;
     for (int i = 0; i < strings->size(); ++i) {
-        if (i != 0) {
-            ss << ",";
-        }
         row<std::string> r = strings->at(i);
         ss << r.to_string() << std::endl;
     }
