@@ -134,29 +134,30 @@ class table {
 
         table(input_file, output_file, memory_size, asc_order, sort_by);
         if(is_field_present(order_by)) order_by_ = get_index_of_field(order_by);
-
+        auto sort = sort_by_;
+        auto order = order_by_;
         if(asc_order_ and order_by_ >= 0) {
-            cmp_func_ = [&](const string_row& a, const string_row& b) {
-                          if(a[sort_by_] == b[sort_by_])
-                              return a[order_by_] < b[order_by_];
-                          return a[sort_by_] < b[sort_by_];
+            cmp_func_ = [sort,order](const string_row& a, const string_row& b) {
+                          if(a[sort] == b[sort])
+                              return a[order] < b[order];
+                          return a[sort] < b[sort];
                         };
         }
         else if(!asc_order_ and order_by_ >= 0) {
-            cmp_func_ = [&](const string_row& a, const string_row& b) {
-                          if(a[sort_by_] == b[sort_by_])
-                              return a[order_by_] > b[order_by_];
-                          return a[sort_by_] > b[sort_by_];
+            cmp_func_ = [sort,order](const string_row& a, const string_row& b) {
+                          if(a[sort] == b[sort])
+                              return a[order] > b[order];
+                          return a[sort] > b[sort];
                           };
         }
         else if(!asc_order_ and order_by_ < 0) {
-            cmp_func_ = [&](const string_row& a, const string_row& b) {
-                          return a[sort_by_] < b[sort_by_];
+            cmp_func_ = [sort](const string_row& a, const string_row& b) {
+                          return a[sort] < b[sort];
             };
         }
         else if(asc_order_ and order_by_ < 0){
-            cmp_func_ = [&](const string_row& a, const string_row& b) {
-                          return a[sort_by_] > b[sort_by_];
+            cmp_func_ = [sort](const string_row& a, const string_row& b) {
+                          return a[sort] > b[sort];
             };
         }
         else {
