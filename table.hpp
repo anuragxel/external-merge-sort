@@ -64,7 +64,6 @@ class table {
     bool asc_order_;
     typedef row<std::string> string_row;
     typedef row<int> int_row;
-    std::function<bool(const string_row&,const string_row&)> cmp_func_;
 
     void get_next_field(std::ifstream &str, int index) {
         std::string line, fieldname, cell;
@@ -134,35 +133,6 @@ class table {
 
         table(input_file, output_file, memory_size, asc_order, sort_by);
         if(is_field_present(order_by)) order_by_ = get_index_of_field(order_by);
-        auto sort = sort_by_;
-        auto order = order_by_;
-        if(asc_order_ and order_by_ >= 0) {
-            cmp_func_ = [sort,order](const string_row& a, const string_row& b) {
-                          if(a[sort] == b[sort])
-                              return a[order] < b[order];
-                          return a[sort] < b[sort];
-                        };
-        }
-        else if(!asc_order_ and order_by_ >= 0) {
-            cmp_func_ = [sort,order](const string_row& a, const string_row& b) {
-                          if(a[sort] == b[sort])
-                              return a[order] > b[order];
-                          return a[sort] > b[sort];
-                          };
-        }
-        else if(!asc_order_ and order_by_ < 0) {
-            cmp_func_ = [sort](const string_row& a, const string_row& b) {
-                          return a[sort] < b[sort];
-            };
-        }
-        else if(asc_order_ and order_by_ < 0){
-            cmp_func_ = [sort](const string_row& a, const string_row& b) {
-                          return a[sort] > b[sort];
-            };
-        }
-        else {
-            throw "FatalError: Can't construct Comparison Operator.";
-        }
     }
 
     bool is_field_present(const std::string &cstr) const {
@@ -188,7 +158,7 @@ class table {
         return true;
     }
 
-    int phase_one() {
+    int phase_one(std::function<bool(const string_row&,const string_row&)> cmp_func) {
       int iter = 0;
       std::fstream file;
       while(input_file_) {
@@ -204,7 +174,7 @@ class table {
               avail_memory_ = avail_memory_ - row_bytes;
               used += row_bytes;
           }
-          std::sort(rows->begin(), rows->end(), cmp_func_);
+          std::sort(rows->begin(), rows->end(), cmp_func);
           if(iter == 0) file.open("0_partition", std::ios_base::out);
           else reopen(file, std::to_string(iter) + "_partition", std::ios_base::out);
           file << db::to_str(rows.get());
@@ -218,10 +188,11 @@ class table {
         return iter + 1;
     }
 
-    void phase_two(int files) {
+    void phase_two(int files, std::function<bool(const string_row&,const string_row&)> cmp_func) {
         std::vector<std::fstream> partitions; // the file streams
         std::vector<bool_wrapper> opened; // stores which files are opened
         // open all the partition files
+
         for(auto i = 0; i < files; i++) {
             auto file_name = std::string(std::to_string(i) + "_partition");
             partitions.push_back(std::fstream(file_name));
@@ -245,7 +216,7 @@ class table {
                     continue;
                 }
                 auto r = get_next_row(partitions[i]);
-                if(cmp_func_(min_r, r)) {
+                if(cmp_func(min_r, r)) {
                     min_r = r;
                     index = i;
                 }
@@ -271,8 +242,33 @@ class table {
     }
 
     void merge_sort() {
-        auto files = phase_one();
-        //phase_two(files);
+        std::function<bool(const string_row&,const string_row&)> cmp_func;
+        if(asc_order_ and order_by_ >= 0) {
+            cmp_func = [&](const string_row& a, const string_row& b) {
+                          if(a[sort_by_] == b[sort_by_])
+                              return a[order_by_] < b[order_by_];
+                          return a[sort_by_] < b[sort_by_];
+                        };
+        }
+        else if(!asc_order_ and order_by_ >= 0) {
+            cmp_func = [&](const string_row& a, const string_row& b) {
+                          if(a[sort_by_] == b[sort_by_])
+                              return a[order_by_] > b[order_by_];
+                          return a[sort_by_] > b[sort_by_];
+                          };
+        }
+        else if(!asc_order_ and order_by_ < 0) {
+            cmp_func = [&](const string_row& a, const string_row& b) {
+                          return a[sort_by_] < b[sort_by_];
+            };
+        }
+        else if(asc_order_ and order_by_ < 0){
+            cmp_func = [&](const string_row& a, const string_row& b) {
+                          return a[sort_by_] > b[sort_by_];
+            };
+        }
+        auto files = phase_one(cmp_func);
+        //phase_two(files, cmp_func);
         //cleanup(files);
     }
 };
