@@ -63,8 +63,8 @@ template<> std::string row<std::string>::to_string() const {
     for (int i = 0; i < tuple_.size(); ++i) {
         if (i != 0) {
             ss << "  ";
-          }
-          ss << tuple_[i];
+        }
+        ss << tuple_[i];
     }
     return ss.str();
 }

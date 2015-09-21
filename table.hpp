@@ -84,7 +84,7 @@ class table {
 
     template <typename file>
     string_row get_next_row(file& filestream, int seek = 0) {
-        if(!filestream) throw "FileError: EOF reached!";
+        if(!filestream) return string_row(std::vector<std::string>());
         if(seek > 0) {
             filestream.seekg(filestream.cur + seek);
         }
@@ -150,15 +150,6 @@ class table {
         return p.second;
     }
 
-
-    template<typename T, typename V>
-    bool vector_equal(std::vector<T> vec, V value) {
-        for(auto& val : vec) {
-            if(val != value) return false;
-        }
-        return true;
-    }
-
     int phase_one(std::function<bool(const string_row&,const string_row&)> cmp_func) {
       int iter = 0;
       std::fstream file;
@@ -189,35 +180,43 @@ class table {
         return iter + 1;
     }
 
-    void phase_two(int files,
-           std::function<bool(const string_row&,const string_row&)> cmp_func) {
+    template<typename T, typename V>
+    bool vector_equal(std::vector<T> vec, V value) {
+        for(auto& val : vec) {
+            if(val != value) return false;
+        }
+        return true;
+    }
 
+    void phase_two(int files, std::function<bool(const string_row&,const string_row&)> cmp_func) {
         std::vector<std::fstream> partitions; // the file streams
         std::vector<bool_wrapper> opened; // stores which files are opened
         std::mt19937 rng(std::time(nullptr));
-        std::uniform_int_distribution<int> gen(0, files - 1); // uniform, unbiased
-        // open all the partition files
+        std::uniform_int_distribution<int> gen(0, files - 1);
         for(auto i = 0; i < files; i++) {
             auto file_name = std::string(std::to_string(i) + "_partition");
             partitions.push_back(std::fstream(file_name));
             opened.push_back(bool_wrapper(true));
         }
-        std::shared_ptr<std::vector<string_row>> rows{new std::vector<string_row>};
         long long int used = 0;
         while(!vector_equal<bool_wrapper>(opened, false)) {
-            int row_bytes;
-            int index = gen(rng);
-            while(!opened[index]) {
-                index = gen(rng);
-            }
+            std::shared_ptr<std::vector<string_row>> rows{new std::vector<string_row>};
+            int row_bytes,index = 0;
             string_row min_r = get_next_row(partitions[index]);
-            row_bytes = min_r.get_bytes();
+            while(min_r.size() == 0) {
+                if(min_r.size() == 0) {
+                    opened[index] = false;
+                }
+                index = gen(rng);
+                min_r = get_next_row(partitions[index]);
+                row_bytes = min_r.get_bytes();
+            }
             for(auto i = 0; i < partitions.size(); i++) {
-                if(!partitions[i]) {
+                auto r = get_next_row(partitions[i]);
+                if(r.size() == 0) {
                     opened[i] = false;
                     continue;
                 }
-                auto r = get_next_row(partitions[i]);
                 if(cmp_func(min_r, r)) { // it's what we want, till now
                     min_r = r;
                     index = i;
@@ -225,20 +224,22 @@ class table {
                 }
             }
             for(auto i = 0; i < partitions.size(); i++) {
-                if(i == index) {
+                if(i == index || !opened[i]) { // min, seek is okay.
                     continue;
                 }
-                // not min, seek by one row = spaces + row_size + size('\n')
-                partitions[i].seekg( -(row_bytes + fields_.size() - 1 + 1),
+                // not min, seek by one row = row_size + spaces+ size('\n')
+                partitions[i].seekg( -(row_size_ + (sizes_.size() - 1)*2 + 1),
                                             std::ios_base::cur);
             }
             rows->push_back(min_r);
             // as memory is low, we write the rows into the output file
             // and we clear the rows to increase memory.
-            if(avail_memory_ - row_bytes <= 0) {
+            if(avail_memory_ - row_bytes <= 5*row_size_) {
+                std::cout << "Ya!" << std::endl;
                 output_file_ << db::to_str(rows.get());
                 rows->clear();
                 avail_memory_ += used;
+                output_file_.flush();
             }
             avail_memory_ = avail_memory_ - row_bytes;
             used += row_bytes;
