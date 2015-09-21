@@ -190,27 +190,31 @@ class table {
 
     void phase_two(int files, std::function<bool(const string_row&,const string_row&)> cmp_func) {
         std::vector<std::fstream> partitions; // the file streams
-        std::vector<bool_wrapper> opened; // stores which files are opened
-        std::mt19937 rng(std::time(nullptr));
-        std::uniform_int_distribution<int> gen(0, files - 1);
+        std::vector<bool_wrapper> opened;
         for(auto i = 0; i < files; i++) {
             auto file_name = std::string(std::to_string(i) + "_partition");
             partitions.push_back(std::fstream(file_name));
             opened.push_back(bool_wrapper(true));
         }
         long long int used = 0;
-        while(!vector_equal<bool_wrapper>(opened, false)) {
-            std::shared_ptr<std::vector<string_row>> rows{new std::vector<string_row>};
+        int itx = 0;
+        std::shared_ptr<std::vector<string_row>> rows{new std::vector<string_row>};
+        while(true) {
+            bool break_flag = false;
             int row_bytes,index = 0;
             string_row min_r = get_next_row(partitions[index]);
             while(min_r.size() == 0) {
-                if(min_r.size() == 0) {
-                    opened[index] = false;
-                }
-                index = gen(rng);
                 min_r = get_next_row(partitions[index]);
                 row_bytes = min_r.get_bytes();
+                // if all files are closed, handle
+                index++;
+                if(index >= files) {
+                    break_flag = true;
+                    break;
+                }
             }
+            //std::cout << "brk1 row :" << std::to_string(itx++) << "  " << min_r.to_string() << std::endl;
+            if(break_flag) break;
             for(auto i = 0; i < partitions.size(); i++) {
                 auto r = get_next_row(partitions[i]);
                 if(r.size() == 0) {
@@ -220,30 +224,39 @@ class table {
                 if(cmp_func(min_r, r)) { // it's what we want, till now
                     min_r = r;
                     index = i;
-                    row_bytes = r.get_bytes();
+                    row_bytes = min_r.get_bytes();
                 }
             }
+            if(vector_equal(opened, false)) break; // all files return no rows. all rows have been depleted.
+            //std::cout << "brk2 row :" << std::to_string(itx++) << "  " << min_r.to_string() << std::endl;
             for(auto i = 0; i < partitions.size(); i++) {
-                if(i == index || !opened[i]) { // min, seek is okay.
+                if(i == index or opened[i] == false) { // min, seek is okay.
                     continue;
                 }
-                // not min, seek by one row = row_size + spaces+ size('\n')
-                partitions[i].seekg( -(row_size_ + (sizes_.size() - 1)*2 + 1),
+                // not min, seek by one row = row_size + spaces + size('\n')
+                partitions[i].seekg( -(row_bytes + (sizes_.size() - 1)*2 + 1),
                                             std::ios_base::cur);
             }
+            //std::cout << "brk3 row :" << std::to_string(itx++) << "  " << min_r.to_string() << std::endl;
             rows->push_back(min_r);
+            avail_memory_ -= row_bytes;
+            used += row_bytes;
             // as memory is low, we write the rows into the output file
             // and we clear the rows to increase memory.
             if(avail_memory_ - row_bytes <= 5*row_size_) {
-                std::cout << "Ya!" << std::endl;
+                std::cout << "Ya" << std::endl;
                 output_file_ << db::to_str(rows.get());
                 rows->clear();
                 avail_memory_ += used;
+                used = 0;
                 output_file_.flush();
             }
-            avail_memory_ = avail_memory_ - row_bytes;
-            used += row_bytes;
         }
+        output_file_ << db::to_str(rows.get());
+        rows->clear();
+        avail_memory_ += used;
+        output_file_.flush();
+        output_file_.close();
     }
 
     void cleanup(int files) {
@@ -280,7 +293,7 @@ class table {
         }
         auto files = phase_one(cmp_func);
         phase_two(files, cmp_func);
-        cleanup(files);
+        //cleanup(files);
     }
 };
 }
