@@ -19,6 +19,9 @@ template <typename T> class row {
   private:
     std::vector<T> tuple_;
   public:
+    row() {
+
+    }
     row(const std::vector<T> &tuple) {
         tuple_ = tuple;
     }
@@ -35,6 +38,9 @@ template <typename T> class row {
         return tuple_.size();
     }
 
+    bool empty() {
+        return tuple_.empty();
+    }
     std::string to_string() const {
         std::stringstream ss;
         for (int i = 0; i < tuple_.size(); ++i) {

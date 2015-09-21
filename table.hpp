@@ -61,7 +61,7 @@ class table {
     long long int memory_size_; // size of total memory to be used.
     long long int avail_memory_; // size of available memory -  intially all available
     std::ifstream input_file_; // input file stream
-    std::fstream output_file_; // output file stream
+    std::string out_filepath_; // output file stream
     bool asc_order_;
     typedef row<std::string> string_row;
 
@@ -106,7 +106,7 @@ class table {
           std::ifstream metadata_file;
           metadata_file.open("metadata.txt");
           input_file_.open(in_filep);
-          output_file_.open(out_filep);
+          out_filepath_ = out_filep;
           memory_size_ = ((long long int)memory_size)*786432; // buffer size in bytes
           avail_memory_ = memory_size_;
           asc_order_ = asc_order;
@@ -189,6 +189,7 @@ class table {
     }
 
     void phase_two(int files, std::function<bool(const string_row&,const string_row&)> cmp_func) {
+        avail_memory_ = memory_size_;
         std::vector<std::fstream> partitions; // the file streams
         std::vector<bool_wrapper> opened;
         for(auto i = 0; i < files; i++) {
@@ -196,67 +197,59 @@ class table {
             partitions.push_back(std::fstream(file_name));
             opened.push_back(bool_wrapper(true));
         }
+        std::ofstream output_file(out_filepath_);
         long long int used = 0;
         int itx = 0;
         std::shared_ptr<std::vector<string_row>> rows{new std::vector<string_row>};
+        std::vector<string_row> all_rows;
+        for(int i = 0; i < partitions.size(); i++) {
+            all_rows.push_back(get_next_row(partitions[i]));
+        }
         while(true) {
-            bool break_flag = false;
-            int row_bytes,index = 0;
-            string_row min_r = get_next_row(partitions[index]);
-            while(min_r.size() == 0) {
-                min_r = get_next_row(partitions[index]);
-                row_bytes = min_r.get_bytes();
-                // if all files are closed, handle
-                index++;
-                if(index >= files) {
-                    break_flag = true;
-                    break;
-                }
-            }
-            //std::cout << "brk1 row :" << std::to_string(itx++) << "  " << min_r.to_string() << std::endl;
-            if(break_flag) break;
-            for(auto i = 0; i < partitions.size(); i++) {
-                auto r = get_next_row(partitions[i]);
-                if(r.size() == 0) {
-                    opened[i] = false;
+            int idx = 0,index = 0;
+            auto row_bytes = 0;
+            string_row min_r;
+            for(auto& value : all_rows) {
+                if(value.size() == 0 or !partitions[idx]) {
+                    opened[idx] = false;
                     continue;
                 }
-                if(cmp_func(min_r, r)) { // it's what we want, till now
-                    min_r = r;
-                    index = i;
+                if(min_r.empty() or cmp_func(value, min_r)) {
+                    min_r = value;
+                    index = idx;
                     row_bytes = min_r.get_bytes();
                 }
+                idx++;
             }
-            if(vector_equal(opened, false)) break; // all files return no rows. all rows have been depleted.
-            //std::cout << "brk2 row :" << std::to_string(itx++) << "  " << min_r.to_string() << std::endl;
-            for(auto i = 0; i < partitions.size(); i++) {
-                if(i == index or opened[i] == false) { // min, seek is okay.
-                    continue;
-                }
-                // not min, seek by one row = row_size + spaces + size('\n')
-                partitions[i].seekg( -(row_bytes + (sizes_.size() - 1)*2 + 1),
-                                            std::ios_base::cur);
-            }
-            //std::cout << "brk3 row :" << std::to_string(itx++) << "  " << min_r.to_string() << std::endl;
+            if(itx > 100001) break;
             rows->push_back(min_r);
+            all_rows[index] = get_next_row(partitions[index]);
             avail_memory_ -= row_bytes;
             used += row_bytes;
+            std::cout << "Index " << itx++ << " row " << min_r.to_string() << std::endl;
             // as memory is low, we write the rows into the output file
             // and we clear the rows to increase memory.
-            if(avail_memory_ - row_bytes <= 5*row_size_) {
+            if(avail_memory_ - row_size_ <= 5*row_size_) {
                 std::cout << "Ya" << std::endl;
-                output_file_ << db::to_str(rows.get());
+                std::cout << "rows size :" << rows->size() << std::endl;
+                output_file << db::to_str(rows.get());
                 rows->clear();
                 avail_memory_ += used;
                 used = 0;
-                output_file_.flush();
+                output_file.flush();
             }
         }
-        output_file_ << db::to_str(rows.get());
+        output_file << db::to_str(rows.get());
+        auto itend = std::remove_if(all_rows.begin(), all_rows.end(), [](const string_row& a) {
+            return a.size() == 0;
+        });
+        std::sort(all_rows.begin(), itend, cmp_func);
+        output_file << db::to_str(all_rows);
+        std::cout << "rows size :" << rows->size() << std::endl;
         rows->clear();
         avail_memory_ += used;
-        output_file_.flush();
-        output_file_.close();
+        output_file.flush();
+        output_file.close();
     }
 
     void cleanup(int files) {
