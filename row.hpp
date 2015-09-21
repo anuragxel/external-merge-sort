@@ -41,6 +41,10 @@ template <typename T> class row {
     bool empty() {
         return tuple_.empty();
     }
+
+    void clear() {
+        return tuple_.clear();
+    }
     std::string to_string() const {
         std::stringstream ss;
         for (int i = 0; i < tuple_.size(); ++i) {

@@ -221,31 +221,29 @@ class table {
                 }
                 idx++;
             }
-            if(itx > 100001) break;
+            if(min_r.empty()) break;
             rows->push_back(min_r);
             all_rows[index] = get_next_row(partitions[index]);
             avail_memory_ -= row_bytes;
             used += row_bytes;
-            std::cout << "Index " << itx++ << " row " << min_r.to_string() << std::endl;
             // as memory is low, we write the rows into the output file
             // and we clear the rows to increase memory.
             if(avail_memory_ - row_size_ <= 5*row_size_) {
-                std::cout << "Ya" << std::endl;
-                std::cout << "rows size :" << rows->size() << std::endl;
                 output_file << db::to_str(rows.get());
                 rows->clear();
                 avail_memory_ += used;
                 used = 0;
                 output_file.flush();
             }
+            min_r.clear();
+            itx++;
         }
         output_file << db::to_str(rows.get());
         auto itend = std::remove_if(all_rows.begin(), all_rows.end(), [](const string_row& a) {
             return a.size() == 0;
         });
-        std::sort(all_rows.begin(), itend, cmp_func);
+        std::sort(all_rows.begin(), itend + 1, cmp_func);
         output_file << db::to_str(all_rows);
-        std::cout << "rows size :" << rows->size() << std::endl;
         rows->clear();
         avail_memory_ += used;
         output_file.flush();
