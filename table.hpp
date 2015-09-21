@@ -288,7 +288,7 @@ class table {
         }
         auto files = phase_one(cmp_func);
         phase_two(files, cmp_func);
-        //cleanup(files);
+        cleanup(files);
     }
 };
 }
