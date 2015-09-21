@@ -242,7 +242,11 @@ class table {
         auto itend = std::remove_if(all_rows.begin(), all_rows.end(), [](const string_row& a) {
             return a.size() == 0;
         });
-        std::sort(all_rows.begin(), itend + 1, cmp_func);
+        std::vector<string_row> tmp_row;
+        for(auto it =  all_rows.begin(); it != itend; it++) {
+            tmp_row.push_back(*it);
+        }
+        std::sort(tmp_row.begin(), tmp_row.end(), cmp_func);
         output_file << db::to_str(all_rows);
         rows->clear();
         avail_memory_ += used;
