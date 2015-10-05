@@ -205,16 +205,15 @@ class table {
         for(int i = 0; i < partitions.size(); i++) {
             all_rows.push_back(get_next_row(partitions[i]));
         }
+        string_row min_r;
         while(true) {
+            itx++;
             int idx = 0,index = 0;
             auto row_bytes = 0;
-            string_row min_r;
             for(auto& value : all_rows) {
                 if(value.size() == 0 or !partitions[idx]) {
-                    opened[idx] = false;
-                    continue;
                 }
-                if(min_r.empty() or cmp_func(value, min_r)) {
+                else if(min_r.empty() or cmp_func(value, min_r)) {
                     min_r = value;
                     index = idx;
                     row_bytes = min_r.get_bytes();
@@ -228,17 +227,17 @@ class table {
             used += row_bytes;
             // as memory is low, we write the rows into the output file
             // and we clear the rows to increase memory.
-            if(avail_memory_ - row_size_ <= 5*row_size_) {
+            if(avail_memory_ - row_size_ <= 0) {
                 output_file << db::to_str(rows.get());
+                output_file.flush();
                 rows->clear();
                 avail_memory_ += used;
                 used = 0;
-                output_file.flush();
             }
             min_r.clear();
-            itx++;
         }
         output_file << db::to_str(rows.get());
+        output_file.flush();
         auto itend = std::remove_if(all_rows.begin(), all_rows.end(), [](const string_row& a) {
             return a.size() == 0;
         });
@@ -247,11 +246,10 @@ class table {
             tmp_row.push_back(*it);
         }
         std::sort(tmp_row.begin(), tmp_row.end(), cmp_func);
-        output_file << db::to_str(all_rows);
+        output_file << db::to_str(tmp_row);
         rows->clear();
         avail_memory_ += used;
         output_file.flush();
-        output_file.close();
     }
 
     void cleanup(int files) {
