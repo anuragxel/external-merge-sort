@@ -13,16 +13,11 @@
 
 #include <string>
 #include <map>
-#include <algorithm>
-#include <queue>
 
-#include <random>
+#include <algorithm>
 #include <memory>
-#include <ctime>
 
 #include "row.hpp"
-
-#define _MAX_FILE_DESCRIPTORS_ 593850
 
 namespace db {
 
@@ -34,22 +29,6 @@ void reopen(stream& pStream, const std::string& pFile,
     pStream.clear();
     pStream.open(pFile, pMode);
 }
-
-class bool_wrapper
-{
-  private:
-    bool m_value_;
-  public:
-    bool_wrapper(): m_value_(){}
-    bool_wrapper( bool value ) : m_value_(value){}
-    operator bool() const { return m_value_;}
-    bool* operator& () { return &m_value_; }
-    const bool * const operator& () const { return &m_value_; }
-    bool operator==(const bool_wrapper& b) { return m_value_ == b.m_value_; }
-    bool operator!=(const bool_wrapper& b) { return m_value_ != b.m_value_; }
-    bool operator==(const bool b) { return m_value_ == b; }
-    bool operator!=(const bool b) { return m_value_ != b; }
-};
 
 class table {
   private:
@@ -74,7 +53,7 @@ class table {
             if(iter == 0) fieldname = cell;
             if(iter == 1) {
                 size = std::stoi(cell);
-                sizes_.push_back(size);
+                sizes_.push_back(std::stoi(cell));
             }
             if(iter > 1) throw "Error: Metadata File Invalid!";
             iter += 1;
@@ -115,9 +94,7 @@ class table {
           int it = 0;
           while (metadata_file) {
               get_next_field(metadata_file, it);
-              if (!metadata_file) {
-                  break;
-              }
+              if (!metadata_file) break;
               it += 1;
           }
           row_size_ = 0;
@@ -161,45 +138,30 @@ class table {
               string_row r = get_next_row(input_file_, 0);
               if(r.size() == 0) break;
               rows->push_back(r);
-              auto row_bytes = r.get_bytes();
-              if(avail_memory_ - row_bytes <= 0) break;
-              avail_memory_ = avail_memory_ - row_bytes;
-              used += row_bytes;
+              if(avail_memory_ - row_size_ <= 0) break;
+              avail_memory_ = avail_memory_ - row_size_;
+              used += row_size_;
           }
           std::sort(rows->begin(), rows->end(), cmp_func);
           if(iter == 0) file.open("0_partition", std::ios_base::out);
           else reopen(file, std::to_string(iter) + "_partition", std::ios_base::out);
           file << db::to_str(rows.get());
           iter += 1;
-          if(iter > _MAX_FILE_DESCRIPTORS_) {
-              throw "UnimplementedError: Too many partitions. Phase 3 needed.";
-          } // Maximum number of Simultanous Open File Descriptors
           avail_memory_ += used;
           rows->clear();
         }
         return iter + 1;
     }
 
-    template<typename T, typename V>
-    bool vector_equal(std::vector<T> vec, V value) {
-        for(auto& val : vec) {
-            if(val != value) return false;
-        }
-        return true;
-    }
-
     void phase_two(int files, std::function<bool(const string_row&,const string_row&)> cmp_func) {
         avail_memory_ = memory_size_;
         std::vector<std::fstream> partitions; // the file streams
-        std::vector<bool_wrapper> opened;
         for(auto i = 0; i < files; i++) {
             auto file_name = std::string(std::to_string(i) + "_partition");
             partitions.push_back(std::fstream(file_name));
-            opened.push_back(bool_wrapper(true));
         }
         std::ofstream output_file(out_filepath_);
         long long int used = 0;
-        int itx = 0;
         std::shared_ptr<std::vector<string_row>> rows{new std::vector<string_row>};
         std::vector<string_row> all_rows;
         for(int i = 0; i < partitions.size(); i++) {
@@ -207,26 +169,21 @@ class table {
         }
         string_row min_r;
         while(true) {
-            itx++;
             int idx = 0,index = 0;
-            auto row_bytes = 0;
             for(auto& value : all_rows) {
                 if(value.size() == 0 or !partitions[idx]) {
                 }
                 else if(min_r.empty() or cmp_func(value, min_r)) {
                     min_r = value;
                     index = idx;
-                    row_bytes = min_r.get_bytes();
                 }
                 idx++;
             }
             if(min_r.empty()) break;
             rows->push_back(min_r);
             all_rows[index] = get_next_row(partitions[index]);
-            avail_memory_ -= row_bytes;
-            used += row_bytes;
-            // as memory is low, we write the rows into the output file
-            // and we clear the rows to increase memory.
+            avail_memory_ -= row_size_;
+            used += row_size_;
             if(avail_memory_ - row_size_ <= 0) {
                 output_file << db::to_str(rows.get());
                 output_file.flush();
@@ -237,9 +194,8 @@ class table {
             min_r.clear();
         }
         output_file << db::to_str(rows.get());
-        output_file.flush();
         auto itend = std::remove_if(all_rows.begin(), all_rows.end(), [](const string_row& a) {
-            return a.size() == 0;
+            return a.empty();
         });
         std::vector<string_row> tmp_row;
         for(auto it =  all_rows.begin(); it != itend; it++) {
@@ -247,9 +203,7 @@ class table {
         }
         std::sort(tmp_row.begin(), tmp_row.end(), cmp_func);
         output_file << db::to_str(tmp_row);
-        rows->clear();
         avail_memory_ += used;
-        output_file.flush();
     }
 
     void cleanup(int files) {

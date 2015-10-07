@@ -12,23 +12,21 @@
 
 #include <string>
 #include <vector>
+
 #include <algorithm>
 
 namespace db {
-template <typename T> class row {
+
+template <typename T>
+class row {
   private:
     std::vector<T> tuple_;
   public:
-    row() {
+    row() {}
 
-    }
-    row(const std::vector<T> &tuple) {
-        tuple_ = tuple;
-    }
+    row(const std::vector<T> &tuple): tuple_(tuple) {}
 
-    row(const row &r) {
-        tuple_ = r.tuple_;
-    }
+    row(const row &r): tuple_(r.tuple_) {}
 
     row& operator=(const row &r) {
         tuple_ = r.tuple_;
@@ -38,13 +36,14 @@ template <typename T> class row {
         return tuple_.size();
     }
 
-    bool empty() {
+    bool empty() const {
         return tuple_.empty();
     }
 
     void clear() {
         return tuple_.clear();
     }
+
     std::string to_string() const {
         std::stringstream ss;
         for (int i = 0; i < tuple_.size(); ++i) {
@@ -68,7 +67,8 @@ template <typename T> class row {
     }
 };
 
-template<> std::string row<std::string>::to_string() const {
+template<>
+std::string row<std::string>::to_string() const {
     std::stringstream ss;
     for (int i = 0; i < tuple_.size(); ++i) {
         if (i != 0) {
@@ -79,7 +79,8 @@ template<> std::string row<std::string>::to_string() const {
     return ss.str();
 }
 
-template<> int row<std::string>::get_bytes() const {
+template<>
+int row<std::string>::get_bytes() const {
     auto size_ = 0;
     for(auto str : tuple_) {
         size_ += str.size();
